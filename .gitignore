@@ -1,0 +1,34 @@
+# ─── Windows ───────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ─── Archivos temporales del sistema ───────────────────────
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+*.swo
+*~
+
+# ─── Visual Studio Code ────────────────────────────────────
+.vscode/
+*.code-workspace
+
+# ─── PowerShell ────────────────────────────────────────────
+# Transcripciones y perfiles locales
+*.pslog
+profile.ps1
+
+# ─── Chocolatey (si se testea en local) ────────────────────
+chocolatey/
+choco-*.nupkg
+
+# ─── Directorios de sistema ────────────────────────────────
+[Dd]esktop.ini
+[Tt]humbs.db

@@ -1,0 +1,384 @@
+@echo off
+:: ============================================================
+::  INSTALADOR GUI — Todo en un solo archivo .bat
+::  Doble clic para ejecutar (pide admin automaticamente)
+:: ============================================================
+
+:: Reescalar con privilegios de administrador si hace falta
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "Start-Process cmd -ArgumentList '/c \"%~f0\"' -Verb RunAs"
+    exit /b
+)
+
+:: Extraer y ejecutar el bloque PowerShell embebido en este archivo
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$lines = Get-Content -LiteralPath '%~f0' -Encoding UTF8;" ^
+    "$ps = ($lines | Select-Object -Skip 21) -join [Environment]::NewLine;" ^
+    "Invoke-Expression $ps"
+exit /b
+
+# ================================================================
+# POWERSHELL — A partir de aqui todo es PowerShell
+# ================================================================
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$paquetes = @(
+    @{ Cat="Compresion";   Nombre="NanaZip";                      Choco="nanazip";         Default=$true  },
+    @{ Cat="Compresion";   Nombre="WinRAR";                       Choco="winrar";          Default=$false },
+    @{ Cat="Compresion";   Nombre="7-Zip";                        Choco="7zip";            Default=$false },
+    @{ Cat="Documentos";   Nombre="Adobe Acrobat Reader";         Choco="adobereader";     Default=$true  },
+    @{ Cat="Multimedia";   Nombre="VLC Media Player";             Choco="vlc";             Default=$true  },
+    @{ Cat="Editores";     Nombre="Notepad++";                    Choco="notepadplusplus"; Default=$true  },
+    @{ Cat="Editores";     Nombre="Visual Studio Code";           Choco="vscode";          Default=$false },
+    @{ Cat="Archivos";     Nombre="Total Commander";              Choco="totalcommander";  Default=$true  },
+    @{ Cat="Archivos";     Nombre="Everything (busqueda rapida)"; Choco="everything";      Default=$true  },
+    @{ Cat="Java";         Nombre="Java JRE 21 LTS (escritorio)"; Choco="temurin21jre";    Default=$true  },
+    @{ Cat="Navegadores";  Nombre="Google Chrome";                Choco="googlechrome";    Default=$true  },
+    @{ Cat="Navegadores";  Nombre="Mozilla Firefox";              Choco="firefox";         Default=$false },
+    @{ Cat="Comunicacion"; Nombre="Zoom";                         Choco="zoom";            Default=$false },
+    @{ Cat="Comunicacion"; Nombre="Slack";                        Choco="slack";           Default=$false },
+    @{ Cat="Comunicacion"; Nombre="Thunderbird (correo)";         Choco="thunderbird";     Default=$false },
+    @{ Cat="Comunicacion"; Nombre="AnyDesk";                      Choco="anydesk.install"; Default=$false },
+    @{ Cat="Comunicacion"; Nombre="TeamViewer";                   Choco="teamviewer";      Default=$false },
+    @{ Cat="Utilidades";   Nombre="ShareX (capturas pantalla)";   Choco="sharex";          Default=$false },
+    @{ Cat="Utilidades";   Nombre="CPU-Z (info hardware)";        Choco="cpu-z";           Default=$false },
+    @{ Cat="Utilidades";   Nombre="WinDirStat (uso de disco)";    Choco="windirstat";      Default=$false },
+    @{ Cat="Utilidades";   Nombre="PatchCleaner";                 Choco="patchcleaner";    Default=$false },
+    @{ Cat="Utilidades";   Nombre="Fuentes Microsoft Core";       Choco="msttcorefonts";   Default=$false },
+    @{ Cat="IA";           Nombre="Claude Desktop";               Choco="claude";          Default=$false }
+)
+
+$cFondo   = [System.Drawing.Color]::FromArgb(18,  18,  24 )
+$cPanel   = [System.Drawing.Color]::FromArgb(28,  28,  38 )
+$cTarjeta = [System.Drawing.Color]::FromArgb(38,  38,  52 )
+$cAcento  = [System.Drawing.Color]::FromArgb(99,  102, 241)
+$cAcentoH = [System.Drawing.Color]::FromArgb(129, 140, 248)
+$cTexto   = [System.Drawing.Color]::FromArgb(226, 232, 240)
+$cSub     = [System.Drawing.Color]::FromArgb(100, 116, 139)
+$cBorde   = [System.Drawing.Color]::FromArgb(51,  51,  71 )
+$cOK      = [System.Drawing.Color]::FromArgb(34,  197, 94 )
+$cError   = [System.Drawing.Color]::FromArgb(239, 68,  68 )
+$cWarn    = [System.Drawing.Color]::FromArgb(251, 191, 36 )
+
+$fTitulo  = New-Object System.Drawing.Font("Segoe UI", 15,  [System.Drawing.FontStyle]::Bold)
+$fSub     = New-Object System.Drawing.Font("Segoe UI", 9,   [System.Drawing.FontStyle]::Regular)
+$fCat     = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+$fItem    = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+$fBtn     = New-Object System.Drawing.Font("Segoe UI", 10,  [System.Drawing.FontStyle]::Bold)
+$fLog     = New-Object System.Drawing.Font("Consolas", 8.5, [System.Drawing.FontStyle]::Regular)
+$fAscii   = New-Object System.Drawing.Font("Consolas", 8,   [System.Drawing.FontStyle]::Bold)
+
+$asciiArt = @(
+    ' ██████╗  ██████╗██████╗      ██╗███╗   ██╗███████╗████████╗ █████╗ ██╗     ██╗     ███████╗██████╗ ',
+    ' ██╔══██╗██╔════╝██╔══██╗     ██║████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██║     ██║     ██╔════╝██╔══██╗',
+    ' ██████╔╝██║     ██████╔╝     ██║██╔██╗ ██║███████╗   ██║   ███████║██║     ██║     █████╗  ██████╔╝',
+    ' ██╔═══╝ ██║     ██╔═══╝      ██║██║╚██╗██║╚════██║   ██║   ██╔══██║██║     ██║     ██╔══╝  ██╔══██╗',
+    ' ██║     ╚██████╗██║          ██║██║ ╚████║███████║   ██║   ██║  ██║███████╗███████╗███████╗██║  ██║ ',
+    ' ╚═╝      ╚═════╝╚═╝          ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚═╝  ╚═╝')
+
+$asciiColors = @(
+    [System.Drawing.Color]::FromArgb(210, 45,  0  ),
+    [System.Drawing.Color]::FromArgb(240, 85,  0  ),
+    [System.Drawing.Color]::FromArgb(255, 130, 0  ),
+    [System.Drawing.Color]::FromArgb(255, 175, 10 ),
+    [System.Drawing.Color]::FromArgb(255, 210, 30 ),
+    [System.Drawing.Color]::FromArgb(255, 240, 70 ))
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text            = "PCP-INSTALLER — Instalador de Software"
+$form.Size            = New-Object System.Drawing.Size(780, 770)
+$form.StartPosition   = "CenterScreen"
+$form.BackColor       = $cFondo
+$form.ForeColor       = $cTexto
+$form.FormBorderStyle = "FixedSingle"
+$form.MaximizeBox     = $false
+$form.Font            = $fItem
+
+$panelHeader = New-Object System.Windows.Forms.Panel
+$panelHeader.Size      = New-Object System.Drawing.Size(780, 122)
+$panelHeader.Location  = New-Object System.Drawing.Point(0, 0)
+$panelHeader.BackColor = $cPanel
+$form.Controls.Add($panelHeader)
+
+$panelHeader.Add_Paint({
+    param($s, $e)
+    $g = $e.Graphics
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
+    for ($i = 0; $i -lt $asciiArt.Count; $i++) {
+        $br = New-Object System.Drawing.SolidBrush($asciiColors[$i])
+        $g.DrawString($asciiArt[$i], $fAscii, $br, [float]4, [float](4 + $i * 12))
+        $br.Dispose()
+    }
+    # linea naranja brillante bajo el arte
+    $brLine = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 120, 0))
+    $e.Graphics.FillRectangle($brLine, 0, 80, 780, 2)
+    $brLine.Dispose()
+})
+
+$lblSub = New-Object System.Windows.Forms.Label
+$lblSub.Text      = "  Selecciona los paquetes a instalar via Chocolatey"
+$lblSub.Font      = $fSub
+$lblSub.ForeColor = $cSub
+$lblSub.Location  = New-Object System.Drawing.Point(20, 92)
+$lblSub.Size      = New-Object System.Drawing.Size(500, 20)
+$lblSub.BackColor = [System.Drawing.Color]::Transparent
+$panelHeader.Controls.Add($lblSub)
+
+$lblContador = New-Object System.Windows.Forms.Label
+$lblContador.Font      = $fSub
+$lblContador.ForeColor = [System.Drawing.Color]::FromArgb(255, 160, 0)
+$lblContador.Location  = New-Object System.Drawing.Point(560, 92)
+$lblContador.Size      = New-Object System.Drawing.Size(200, 20)
+$lblContador.TextAlign = "MiddleRight"
+$lblContador.BackColor = [System.Drawing.Color]::Transparent
+$panelHeader.Controls.Add($lblContador)
+
+$panelScroll = New-Object System.Windows.Forms.Panel
+$panelScroll.Location    = New-Object System.Drawing.Point(12, 130)
+$panelScroll.Size        = New-Object System.Drawing.Size(756, 420)
+$panelScroll.BackColor   = $cFondo
+$panelScroll.AutoScroll  = $true
+$panelScroll.BorderStyle = "None"
+$form.Controls.Add($panelScroll)
+
+$checkboxes = @{}
+$categorias = $paquetes | ForEach-Object { $_.Cat } | Select-Object -Unique
+$COL_W = 358; $COL_GAP = 12
+$col = 0; $yLeft = 8; $yRight = 8
+
+foreach ($cat in $categorias) {
+    $items = $paquetes | Where-Object { $_.Cat -eq $cat }
+    $x = if ($col -eq 0) { 6 } else { 6 + $COL_W + $COL_GAP }
+    $y = if ($col -eq 0) { $yLeft } else { $yRight }
+
+    $lblCat = New-Object System.Windows.Forms.Label
+    $lblCat.Text      = $cat.ToUpper()
+    $lblCat.Font      = $fCat
+    $lblCat.ForeColor = $cSub
+    $lblCat.Location  = New-Object System.Drawing.Point($x, $y)
+    $lblCat.Size      = New-Object System.Drawing.Size(340, 18)
+    $lblCat.BackColor = [System.Drawing.Color]::Transparent
+    $panelScroll.Controls.Add($lblCat)
+    $y += 20
+
+    foreach ($pkg in $items) {
+        $card = New-Object System.Windows.Forms.Panel
+        $card.Size      = New-Object System.Drawing.Size(348, 36)
+        $card.Location  = New-Object System.Drawing.Point($x, $y)
+        $card.BackColor = $cTarjeta
+        $card.Cursor    = "Hand"
+        $panelScroll.Controls.Add($card)
+
+        $cb = New-Object System.Windows.Forms.CheckBox
+        $cb.Text      = $pkg.Nombre
+        $cb.Checked   = $pkg.Default
+        $cb.Tag       = $pkg.Choco
+        $cb.Font      = $fItem
+        $cb.ForeColor = $cTexto
+        $cb.BackColor = $cTarjeta
+        $cb.Location  = New-Object System.Drawing.Point(10, 7)
+        $cb.Size      = New-Object System.Drawing.Size(330, 22)
+        $cb.FlatStyle = "Flat"
+        $card.Controls.Add($cb)
+        $checkboxes[$pkg.Choco] = $cb
+
+        $card.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 68) })
+        $card.Add_MouseLeave({ $this.BackColor = $cTarjeta })
+        $card.Add_Click({ $this.Controls[0].Checked = -not $this.Controls[0].Checked })
+        $cb.Add_CheckedChanged({
+            $s = ($checkboxes.Values | Where-Object { $_.Checked }).Count
+            $lblContador.Text = "$s de $($checkboxes.Count) seleccionados"
+        })
+        $y += 42
+    }
+    $y += 10
+    if ($col -eq 0) { $yLeft = $y; $col = 1 } else { $yRight = $y; $col = 0 }
+}
+
+$s0 = ($checkboxes.Values | Where-Object { $_.Checked }).Count
+$lblContador.Text = "$s0 de $($checkboxes.Count) seleccionados"
+
+$sep = New-Object System.Windows.Forms.Panel
+$sep.Size      = New-Object System.Drawing.Size(756, 1)
+$sep.Location  = New-Object System.Drawing.Point(12, 558)
+$sep.BackColor = $cBorde
+$form.Controls.Add($sep)
+
+$btnTodos = New-Object System.Windows.Forms.Button
+$btnTodos.Text      = "Seleccionar todo"
+$btnTodos.Size      = New-Object System.Drawing.Size(148, 32)
+$btnTodos.Location  = New-Object System.Drawing.Point(12, 568)
+$btnTodos.FlatStyle = "Flat"
+$btnTodos.FlatAppearance.BorderColor = $cBorde
+$btnTodos.BackColor = $cTarjeta
+$btnTodos.ForeColor = $cTexto
+$btnTodos.Font      = $fSub
+$btnTodos.Cursor    = "Hand"
+$btnTodos.Add_Click({ foreach ($cb in $checkboxes.Values) { $cb.Checked = $true } })
+$form.Controls.Add($btnTodos)
+
+$btnNinguno = New-Object System.Windows.Forms.Button
+$btnNinguno.Text      = "Deseleccionar todo"
+$btnNinguno.Size      = New-Object System.Drawing.Size(148, 32)
+$btnNinguno.Location  = New-Object System.Drawing.Point(168, 568)
+$btnNinguno.FlatStyle = "Flat"
+$btnNinguno.FlatAppearance.BorderColor = $cBorde
+$btnNinguno.BackColor = $cTarjeta
+$btnNinguno.ForeColor = $cTexto
+$btnNinguno.Font      = $fSub
+$btnNinguno.Cursor    = "Hand"
+$btnNinguno.Add_Click({ foreach ($cb in $checkboxes.Values) { $cb.Checked = $false } })
+$form.Controls.Add($btnNinguno)
+
+$btnInstalar = New-Object System.Windows.Forms.Button
+$btnInstalar.Text      = "INSTALAR SELECCIONADOS"
+$btnInstalar.Size      = New-Object System.Drawing.Size(270, 40)
+$btnInstalar.Location  = New-Object System.Drawing.Point(480, 564)
+$btnInstalar.FlatStyle = "Flat"
+$btnInstalar.FlatAppearance.BorderSize = 0
+$btnInstalar.BackColor = [System.Drawing.Color]::FromArgb(220, 80, 0)
+$btnInstalar.ForeColor = [System.Drawing.Color]::White
+$btnInstalar.Font      = $fBtn
+$btnInstalar.Cursor    = "Hand"
+$btnInstalar.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb(255, 120, 0) })
+$btnInstalar.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(220, 80,  0) })
+$form.Controls.Add($btnInstalar)
+
+$lblLogTit = New-Object System.Windows.Forms.Label
+$lblLogTit.Text      = "REGISTRO DE INSTALACION"
+$lblLogTit.Font      = $fCat
+$lblLogTit.ForeColor = $cSub
+$lblLogTit.Location  = New-Object System.Drawing.Point(12, 618)
+$lblLogTit.Size      = New-Object System.Drawing.Size(300, 16)
+$lblLogTit.BackColor = [System.Drawing.Color]::Transparent
+$form.Controls.Add($lblLogTit)
+
+$txtLog = New-Object System.Windows.Forms.RichTextBox
+$txtLog.Location    = New-Object System.Drawing.Point(12, 636)
+$txtLog.Size        = New-Object System.Drawing.Size(756, 82)
+$txtLog.BackColor   = $cPanel
+$txtLog.ForeColor   = $cTexto
+$txtLog.Font        = $fLog
+$txtLog.ReadOnly    = $true
+$txtLog.BorderStyle = "None"
+$txtLog.ScrollBars  = "Vertical"
+$txtLog.Text        = "Listo. Selecciona los paquetes y pulsa Instalar..."
+$form.Controls.Add($txtLog)
+
+function Write-Log($texto, $color = $null) {
+    $txtLog.SelectionStart  = $txtLog.TextLength
+    $txtLog.SelectionLength = 0
+    $txtLog.SelectionColor  = if ($color) { $color } else { $cTexto }
+    $txtLog.AppendText("$texto`n")
+    $txtLog.ScrollToCaret()
+    $form.Refresh()
+}
+
+$btnInstalar.Add_Click({
+    $selList = @($checkboxes.Values | Where-Object { $_.Checked } | ForEach-Object {
+        [PSCustomObject]@{ Text = $_.Text; Tag = $_.Tag }
+    })
+    if ($selList.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "No has seleccionado ningun paquete.",
+            "Nada que instalar",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        return
+    }
+    $resp = [System.Windows.Forms.MessageBox]::Show(
+        "Se instalaran $($selList.Count) paquete(s).`n`nContinuar?",
+        "Confirmar instalacion",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($resp -ne "Yes") { return }
+
+    $btnInstalar.Enabled = $false
+    $btnTodos.Enabled    = $false
+    $btnNinguno.Enabled  = $false
+    $txtLog.Clear()
+
+    # Runspace en background: la UI queda libre durante la instalacion
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = "STA"
+    $rs.ThreadOptions  = "ReuseThread"
+    $rs.Open()
+    $rs.SessionStateProxy.SetVariable('selList',     $selList)
+    $rs.SessionStateProxy.SetVariable('txtLog',      $txtLog)
+    $rs.SessionStateProxy.SetVariable('form',        $form)
+    $rs.SessionStateProxy.SetVariable('btnInstalar', $btnInstalar)
+    $rs.SessionStateProxy.SetVariable('btnTodos',    $btnTodos)
+    $rs.SessionStateProxy.SetVariable('btnNinguno',  $btnNinguno)
+    $rs.SessionStateProxy.SetVariable('cOK',         $cOK)
+    $rs.SessionStateProxy.SetVariable('cError',      $cError)
+    $rs.SessionStateProxy.SetVariable('cWarn',       $cWarn)
+    $rs.SessionStateProxy.SetVariable('cSub',        $cSub)
+    $rs.SessionStateProxy.SetVariable('cTexto',      $cTexto)
+    $rs.SessionStateProxy.SetVariable('cBorde',      $cBorde)
+
+    $ps = [powershell]::Create()
+    $ps.Runspace = $rs
+    $ps.AddScript({
+        # Escribe en el log desde el hilo de background (marshal al hilo UI)
+        function UILog($t, $c) {
+            $log = $txtLog; $txt = $t; $color = $c
+            $log.Invoke([System.Windows.Forms.MethodInvoker]({
+                $log.SelectionStart  = $log.TextLength
+                $log.SelectionLength = 0
+                $log.SelectionColor  = $color
+                $log.AppendText("$txt`n")
+                $log.ScrollToCaret()
+            }.GetNewClosure()))
+        }
+        function UIEnable($v) {
+            $bi = $btnInstalar; $bt = $btnTodos; $bn = $btnNinguno; $val = $v
+            $form.Invoke([System.Windows.Forms.MethodInvoker]({
+                $bi.Enabled = $val; $bt.Enabled = $val; $bn.Enabled = $val
+            }.GetNewClosure()))
+        }
+
+        UILog "Verificando Chocolatey..." $cSub
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+            UILog "Instalando Chocolatey..." $cWarn
+            try {
+                Set-ExecutionPolicy Bypass -Scope Process -Force
+                [System.Net.ServicePointManager]::SecurityProtocol = `
+                    [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+                Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+                    'https://community.chocolatey.org/install.ps1'))
+                $env:Path += ";$env:ALLUSERSPROFILE\chocolatey\bin"
+                UILog "Chocolatey instalado correctamente." $cOK
+            } catch {
+                UILog "Error instalando Chocolatey: $_" $cError
+                UIEnable $true
+                return
+            }
+        } else { UILog "Chocolatey encontrado." $cOK }
+
+        UILog "" $cTexto
+        UILog "Instalando $($selList.Count) paquete(s)..." $cSub
+        UILog "----------------------------------------------" $cBorde
+
+        $ok = 0; $err = 0
+        foreach ($pkg in $selList) {
+            UILog "  >> $($pkg.Text)..." $cTexto
+            & choco install $pkg.Tag -y --no-progress 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { UILog "     OK  $($pkg.Text)" $cOK;    $ok++ }
+            else                     { UILog "     FALLO  $($pkg.Text)" $cError; $err++ }
+        }
+
+        UILog "----------------------------------------------" $cBorde
+        if ($err -eq 0) { UILog "  Completado: $ok paquete(s) instalados sin errores." $cOK }
+        else            { UILog "  Completado: $ok OK  |  $err con errores." $cWarn }
+        UILog "  Puede que necesites reiniciar el equipo." $cSub
+        UIEnable $true
+    }) | Out-Null
+    $ps.BeginInvoke() | Out-Null
+})
+
+$form.Add_Shown({ $form.Activate() })
+[void]$form.ShowDialog()

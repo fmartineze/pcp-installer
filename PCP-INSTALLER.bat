@@ -52,6 +52,87 @@ $paquetes = @(
     @{ Cat="IA";           Nombre="Claude Desktop";               Choco="claude";          Default=$false }
 )
 
+$scripts = @(
+    @{
+        Nombre  = "Actualizar fecha y hora"
+        Desc    = "Sincroniza la fecha y hora del sistema contra servidores NTP de internet"
+        Default = $false
+        Accion  = {
+            # Asegurar que el servicio W32tm esta activo
+            Set-Service -Name "W32Time" -StartupType Automatic -ErrorAction SilentlyContinue
+            Start-Service -Name "W32Time" -ErrorAction SilentlyContinue
+            # Registrar y sincronizar contra pool NTP publico
+            & w32tm /config /manualpeerlist:"pool.ntp.org,0.pool.ntp.org,1.pool.ntp.org" /syncfromflags:manual /reliable:YES /update | Out-Null
+            & w32tm /resync /force | Out-Null
+        }
+    },
+    @{
+        Nombre  = "Desactivar inicio rapido"
+        Desc    = "Desactiva Fast Startup (opcion de energia)"
+        Default = $false
+        Accion  = {
+            $p = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"
+            Set-ItemProperty -Path $p -Name "HiberbootEnabled" -Value 0 -Type DWord -Force
+        }
+    },
+    @{
+        Nombre  = "Ajuste Energia: pantalla y suspension a Nunca"
+        Desc    = "Apagado de pantalla y suspension en Nunca (AC y DC)"
+        Default = $false
+        Accion  = {
+            powercfg /change monitor-timeout-ac 0
+            powercfg /change standby-timeout-ac 0
+            powercfg /change disk-timeout-ac 0
+            powercfg /change monitor-timeout-dc 0
+            powercfg /change standby-timeout-dc 0
+            powercfg /change disk-timeout-dc 0
+        }
+    },
+    @{
+        Nombre  = "Privacidad y Telemetria"
+        Desc    = "Desactiva telemetria, DiagTrack, Cortana, publicidad y sugerencias"
+        Default = $false
+        Accion  = {
+            $pDC = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+            if (-not (Test-Path $pDC)) { New-Item -Path $pDC -Force | Out-Null }
+            Set-ItemProperty -Path $pDC -Name "AllowTelemetry" -Value 0 -Type DWord -Force
+            Stop-Service "DiagTrack"        -Force -ErrorAction SilentlyContinue
+            Set-Service  "DiagTrack"        -StartupType Disabled -ErrorAction SilentlyContinue
+            Stop-Service "dmwappushservice" -Force -ErrorAction SilentlyContinue
+            Set-Service  "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
+            $pAd = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo"
+            if (-not (Test-Path $pAd)) { New-Item -Path $pAd -Force | Out-Null }
+            Set-ItemProperty -Path $pAd -Name "Enabled" -Value 0 -Type DWord -Force
+            $pCo = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+            if (-not (Test-Path $pCo)) { New-Item -Path $pCo -Force | Out-Null }
+            Set-ItemProperty -Path $pCo -Name "AllowCortana" -Value 0 -Type DWord -Force
+            $pCd = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+            Set-ItemProperty -Path $pCd -Name "SystemPaneSuggestionsEnabled"    -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $pCd -Name "SubscribedContent-338388Enabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $pCd -Name "SubscribedContent-310093Enabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    },
+    @{
+        Nombre  = "Limpiar archivos temporales"
+        Desc    = "Vacia TEMP, TMP, Windows\Temp, Prefetch y cache de miniaturas"
+        Default = $false
+        Accion  = {
+            $paths = @($env:TEMP, $env:TMP, "C:\Windows\Temp", "C:\Windows\Prefetch")
+            foreach ($p in $paths) {
+                if (Test-Path $p) {
+                    Get-ChildItem -Path $p -Recurse -ErrorAction SilentlyContinue |
+                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
+            $th = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"
+            if (Test-Path $th) {
+                Get-ChildItem -Path $th -Filter "thumbcache_*.db" -ErrorAction SilentlyContinue |
+                    Remove-Item -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+)
+
 $cFondo   = [System.Drawing.Color]::FromArgb(18,  18,  24 )
 $cPanel   = [System.Drawing.Color]::FromArgb(28,  28,  38 )
 $cTarjeta = [System.Drawing.Color]::FromArgb(38,  38,  52 )
@@ -63,6 +144,7 @@ $cBorde   = [System.Drawing.Color]::FromArgb(51,  51,  71 )
 $cOK      = [System.Drawing.Color]::FromArgb(34,  197, 94 )
 $cError   = [System.Drawing.Color]::FromArgb(239, 68,  68 )
 $cWarn    = [System.Drawing.Color]::FromArgb(251, 191, 36 )
+$cScript  = [System.Drawing.Color]::FromArgb(20,  184, 166)
 
 $fTitulo  = New-Object System.Drawing.Font("Segoe UI", 15,  [System.Drawing.FontStyle]::Bold)
 $fSub     = New-Object System.Drawing.Font("Segoe UI", 9,   [System.Drawing.FontStyle]::Regular)
@@ -120,7 +202,7 @@ $panelHeader.Add_Paint({
 })
 
 $lblSub = New-Object System.Windows.Forms.Label
-$lblSub.Text      = "  Selecciona los paquetes a instalar via Chocolatey"
+$lblSub.Text      = "  Selecciona paquetes a instalar y scripts a ejecutar"
 $lblSub.Font      = $fSub
 $lblSub.ForeColor = $cSub
 $lblSub.Location  = New-Object System.Drawing.Point(20, 92)
@@ -145,7 +227,9 @@ $panelScroll.AutoScroll  = $true
 $panelScroll.BorderStyle = "None"
 $form.Controls.Add($panelScroll)
 
-$checkboxes = @{}
+$checkboxes       = @{}
+$checkboxesScripts = @{}
+$scriptActions     = @{}
 $categorias = $paquetes | ForEach-Object { $_.Cat } | Select-Object -Unique
 $COL_W = 358; $COL_GAP = 12
 $col = 0; $yLeft = 8; $yRight = 8
@@ -202,6 +286,65 @@ foreach ($cat in $categorias) {
 $s0 = ($checkboxes.Values | Where-Object { $_.Checked }).Count
 $lblContador.Text = "$s0 de $($checkboxes.Count) seleccionados"
 
+# ── Seccion SCRIPTS ──────────────────────────────────────────
+$ySc = [Math]::Max($yLeft, $yRight) + 14
+
+$sepSc = New-Object System.Windows.Forms.Panel
+$sepSc.Size      = New-Object System.Drawing.Size(724, 1)
+$sepSc.Location  = New-Object System.Drawing.Point(6, $ySc)
+$sepSc.BackColor = $cBorde
+$panelScroll.Controls.Add($sepSc)
+$ySc += 10
+
+$lblSecScripts = New-Object System.Windows.Forms.Label
+$lblSecScripts.Text      = "SCRIPTS DEL SISTEMA"
+$lblSecScripts.Font      = $fCat
+$lblSecScripts.ForeColor = $cScript
+$lblSecScripts.Location  = New-Object System.Drawing.Point(6, $ySc)
+$lblSecScripts.Size      = New-Object System.Drawing.Size(724, 18)
+$lblSecScripts.BackColor = [System.Drawing.Color]::Transparent
+$panelScroll.Controls.Add($lblSecScripts)
+$ySc += 22
+
+foreach ($scr in $scripts) {
+    $scriptActions[$scr.Nombre] = $scr.Accion.ToString()
+
+    $cardSc = New-Object System.Windows.Forms.Panel
+    $cardSc.Size      = New-Object System.Drawing.Size(724, 48)
+    $cardSc.Location  = New-Object System.Drawing.Point(6, $ySc)
+    $cardSc.BackColor = $cTarjeta
+    $cardSc.Cursor    = "Hand"
+    $panelScroll.Controls.Add($cardSc)
+
+    $cbSc = New-Object System.Windows.Forms.CheckBox
+    $cbSc.Text      = $scr.Nombre
+    $cbSc.Checked   = $scr.Default
+    $cbSc.Tag       = $scr.Nombre
+    $cbSc.Font      = $fItem
+    $cbSc.ForeColor = $cTexto
+    $cbSc.BackColor = $cTarjeta
+    $cbSc.Location  = New-Object System.Drawing.Point(10, 6)
+    $cbSc.Size      = New-Object System.Drawing.Size(706, 20)
+    $cbSc.FlatStyle = "Flat"
+    $cardSc.Controls.Add($cbSc)
+
+    $lblDescSc = New-Object System.Windows.Forms.Label
+    $lblDescSc.Text      = $scr.Desc
+    $lblDescSc.Font      = $fSub
+    $lblDescSc.ForeColor = $cSub
+    $lblDescSc.BackColor = [System.Drawing.Color]::Transparent
+    $lblDescSc.Location  = New-Object System.Drawing.Point(28, 27)
+    $lblDescSc.Size      = New-Object System.Drawing.Size(688, 16)
+    $cardSc.Controls.Add($lblDescSc)
+
+    $cardSc.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 68) })
+    $cardSc.Add_MouseLeave({ $this.BackColor = $cTarjeta })
+    $cardSc.Add_Click({ $this.Controls[0].Checked = -not $this.Controls[0].Checked })
+
+    $checkboxesScripts[$scr.Nombre] = $cbSc
+    $ySc += 54
+}
+
 $sep = New-Object System.Windows.Forms.Panel
 $sep.Size      = New-Object System.Drawing.Size(756, 1)
 $sep.Location  = New-Object System.Drawing.Point(12, 558)
@@ -218,7 +361,10 @@ $btnTodos.BackColor = $cTarjeta
 $btnTodos.ForeColor = $cTexto
 $btnTodos.Font      = $fSub
 $btnTodos.Cursor    = "Hand"
-$btnTodos.Add_Click({ foreach ($cb in $checkboxes.Values) { $cb.Checked = $true } })
+$btnTodos.Add_Click({
+    foreach ($cb in $checkboxes.Values)        { $cb.Checked = $true }
+    foreach ($cb in $checkboxesScripts.Values) { $cb.Checked = $true }
+})
 $form.Controls.Add($btnTodos)
 
 $btnNinguno = New-Object System.Windows.Forms.Button
@@ -231,13 +377,16 @@ $btnNinguno.BackColor = $cTarjeta
 $btnNinguno.ForeColor = $cTexto
 $btnNinguno.Font      = $fSub
 $btnNinguno.Cursor    = "Hand"
-$btnNinguno.Add_Click({ foreach ($cb in $checkboxes.Values) { $cb.Checked = $false } })
+$btnNinguno.Add_Click({
+    foreach ($cb in $checkboxes.Values)        { $cb.Checked = $false }
+    foreach ($cb in $checkboxesScripts.Values) { $cb.Checked = $false }
+})
 $form.Controls.Add($btnNinguno)
 
 $btnInstalar = New-Object System.Windows.Forms.Button
-$btnInstalar.Text      = "INSTALAR SELECCIONADOS"
-$btnInstalar.Size      = New-Object System.Drawing.Size(270, 40)
-$btnInstalar.Location  = New-Object System.Drawing.Point(480, 564)
+$btnInstalar.Text      = "INSTALAR PAQUETES"
+$btnInstalar.Size      = New-Object System.Drawing.Size(183, 40)
+$btnInstalar.Location  = New-Object System.Drawing.Point(388, 564)
 $btnInstalar.FlatStyle = "Flat"
 $btnInstalar.FlatAppearance.BorderSize = 0
 $btnInstalar.BackColor = [System.Drawing.Color]::FromArgb(220, 80, 0)
@@ -248,8 +397,22 @@ $btnInstalar.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb
 $btnInstalar.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(220, 80,  0) })
 $form.Controls.Add($btnInstalar)
 
+$btnEjecutar = New-Object System.Windows.Forms.Button
+$btnEjecutar.Text      = "EJECUTAR SCRIPTS"
+$btnEjecutar.Size      = New-Object System.Drawing.Size(183, 40)
+$btnEjecutar.Location  = New-Object System.Drawing.Point(579, 564)
+$btnEjecutar.FlatStyle = "Flat"
+$btnEjecutar.FlatAppearance.BorderSize = 0
+$btnEjecutar.BackColor = [System.Drawing.Color]::FromArgb(13, 148, 136)
+$btnEjecutar.ForeColor = [System.Drawing.Color]::White
+$btnEjecutar.Font      = $fBtn
+$btnEjecutar.Cursor    = "Hand"
+$btnEjecutar.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb(20, 184, 166) })
+$btnEjecutar.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(13, 148, 136) })
+$form.Controls.Add($btnEjecutar)
+
 $lblLogTit = New-Object System.Windows.Forms.Label
-$lblLogTit.Text      = "REGISTRO DE INSTALACION"
+$lblLogTit.Text      = "REGISTRO"
 $lblLogTit.Font      = $fCat
 $lblLogTit.ForeColor = $cSub
 $lblLogTit.Location  = New-Object System.Drawing.Point(12, 618)
@@ -266,7 +429,7 @@ $txtLog.Font        = $fLog
 $txtLog.ReadOnly    = $true
 $txtLog.BorderStyle = "None"
 $txtLog.ScrollBars  = "Vertical"
-$txtLog.Text        = "Listo. Selecciona los paquetes y pulsa Instalar..."
+$txtLog.Text        = "Listo. Selecciona paquetes o scripts y pulsa el boton correspondiente..."
 $form.Controls.Add($txtLog)
 
 function Write-Log($texto, $color = $null) {
@@ -298,6 +461,7 @@ $btnInstalar.Add_Click({
     if ($resp -ne "Yes") { return }
 
     $btnInstalar.Enabled = $false
+    $btnEjecutar.Enabled = $false
     $btnTodos.Enabled    = $false
     $btnNinguno.Enabled  = $false
     $txtLog.Clear()
@@ -311,6 +475,7 @@ $btnInstalar.Add_Click({
     $rs.SessionStateProxy.SetVariable('txtLog',      $txtLog)
     $rs.SessionStateProxy.SetVariable('form',        $form)
     $rs.SessionStateProxy.SetVariable('btnInstalar', $btnInstalar)
+    $rs.SessionStateProxy.SetVariable('btnEjecutar', $btnEjecutar)
     $rs.SessionStateProxy.SetVariable('btnTodos',    $btnTodos)
     $rs.SessionStateProxy.SetVariable('btnNinguno',  $btnNinguno)
     $rs.SessionStateProxy.SetVariable('cOK',         $cOK)
@@ -323,7 +488,6 @@ $btnInstalar.Add_Click({
     $ps = [powershell]::Create()
     $ps.Runspace = $rs
     $ps.AddScript({
-        # Escribe en el log desde el hilo de background (marshal al hilo UI)
         function UILog($t, $c) {
             $log = $txtLog; $txt = $t; $color = $c
             $log.Invoke([System.Windows.Forms.MethodInvoker]({
@@ -335,9 +499,9 @@ $btnInstalar.Add_Click({
             }.GetNewClosure()))
         }
         function UIEnable($v) {
-            $bi = $btnInstalar; $bt = $btnTodos; $bn = $btnNinguno; $val = $v
+            $bi = $btnInstalar; $be = $btnEjecutar; $bt = $btnTodos; $bn = $btnNinguno; $val = $v
             $form.Invoke([System.Windows.Forms.MethodInvoker]({
-                $bi.Enabled = $val; $bt.Enabled = $val; $bn.Enabled = $val
+                $bi.Enabled = $val; $be.Enabled = $val; $bt.Enabled = $val; $bn.Enabled = $val
             }.GetNewClosure()))
         }
 
@@ -375,6 +539,93 @@ $btnInstalar.Add_Click({
         if ($err -eq 0) { UILog "  Completado: $ok paquete(s) instalados sin errores." $cOK }
         else            { UILog "  Completado: $ok OK  |  $err con errores." $cWarn }
         UILog "  Puede que necesites reiniciar el equipo." $cSub
+        UIEnable $true
+    }) | Out-Null
+    $ps.BeginInvoke() | Out-Null
+})
+
+$btnEjecutar.Add_Click({
+    $selScripts = @($checkboxesScripts.Values | Where-Object { $_.Checked } | ForEach-Object {
+        [PSCustomObject]@{ Nombre = $_.Tag; Accion = $scriptActions[$_.Tag] }
+    })
+    if ($selScripts.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "No has seleccionado ningun script.",
+            "Nada que ejecutar",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        return
+    }
+    $resp = [System.Windows.Forms.MessageBox]::Show(
+        "Se ejecutaran $($selScripts.Count) script(s).`n`nContinuar?",
+        "Confirmar ejecucion",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($resp -ne "Yes") { return }
+
+    $btnInstalar.Enabled = $false
+    $btnEjecutar.Enabled = $false
+    $btnTodos.Enabled    = $false
+    $btnNinguno.Enabled  = $false
+    $txtLog.Clear()
+
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = "STA"
+    $rs.ThreadOptions  = "ReuseThread"
+    $rs.Open()
+    $rs.SessionStateProxy.SetVariable('selScripts',  $selScripts)
+    $rs.SessionStateProxy.SetVariable('txtLog',      $txtLog)
+    $rs.SessionStateProxy.SetVariable('form',        $form)
+    $rs.SessionStateProxy.SetVariable('btnInstalar', $btnInstalar)
+    $rs.SessionStateProxy.SetVariable('btnEjecutar', $btnEjecutar)
+    $rs.SessionStateProxy.SetVariable('btnTodos',    $btnTodos)
+    $rs.SessionStateProxy.SetVariable('btnNinguno',  $btnNinguno)
+    $rs.SessionStateProxy.SetVariable('cOK',         $cOK)
+    $rs.SessionStateProxy.SetVariable('cError',      $cError)
+    $rs.SessionStateProxy.SetVariable('cWarn',       $cWarn)
+    $rs.SessionStateProxy.SetVariable('cSub',        $cSub)
+    $rs.SessionStateProxy.SetVariable('cTexto',      $cTexto)
+    $rs.SessionStateProxy.SetVariable('cBorde',      $cBorde)
+
+    $ps = [powershell]::Create()
+    $ps.Runspace = $rs
+    $ps.AddScript({
+        function UILog($t, $c) {
+            $log = $txtLog; $txt = $t; $color = $c
+            $log.Invoke([System.Windows.Forms.MethodInvoker]({
+                $log.SelectionStart  = $log.TextLength
+                $log.SelectionLength = 0
+                $log.SelectionColor  = $color
+                $log.AppendText("$txt`n")
+                $log.ScrollToCaret()
+            }.GetNewClosure()))
+        }
+        function UIEnable($v) {
+            $bi = $btnInstalar; $be = $btnEjecutar; $bt = $btnTodos; $bn = $btnNinguno; $val = $v
+            $form.Invoke([System.Windows.Forms.MethodInvoker]({
+                $bi.Enabled = $val; $be.Enabled = $val; $bt.Enabled = $val; $bn.Enabled = $val
+            }.GetNewClosure()))
+        }
+
+        UILog "Ejecutando $($selScripts.Count) script(s)..." $cSub
+        UILog "----------------------------------------------" $cBorde
+
+        $ok = 0; $err = 0
+        foreach ($s in $selScripts) {
+            UILog "  >> $($s.Nombre)..." $cTexto
+            try {
+                & ([scriptblock]::Create($s.Accion))
+                UILog "     OK  $($s.Nombre)" $cOK
+                $ok++
+            } catch {
+                UILog "     FALLO  $($s.Nombre): $_" $cError
+                $err++
+            }
+        }
+
+        UILog "----------------------------------------------" $cBorde
+        if ($err -eq 0) { UILog "  Completado: $ok script(s) ejecutados sin errores." $cOK }
+        else            { UILog "  Completado: $ok OK  |  $err con errores." $cWarn }
         UIEnable $true
     }) | Out-Null
     $ps.BeginInvoke() | Out-Null

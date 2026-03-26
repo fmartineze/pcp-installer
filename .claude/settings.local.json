@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:winutil.christitus.com)",
+      "WebSearch",
+      "WebFetch(domain:christitus.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:www.ghacks.net)"
+    ]
+  }
+}

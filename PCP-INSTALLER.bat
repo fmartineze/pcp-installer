@@ -30,6 +30,7 @@ $paquetes = @(
     @{ Cat="Compresion";   Nombre="NanaZip";                      Choco="nanazip";         Default=$true  },
     @{ Cat="Compresion";   Nombre="WinRAR";                       Choco="winrar";          Default=$false },
     @{ Cat="Compresion";   Nombre="7-Zip";                        Choco="7zip";            Default=$false },
+    @{ Cat="Documentos";   Nombre="Microsoft 365 Apps";           Choco="office365proplus"; Default=$false },
     @{ Cat="Documentos";   Nombre="Adobe Acrobat Reader";         Choco="adobereader";     Default=$true  },
     @{ Cat="Multimedia";   Nombre="VLC Media Player";             Choco="vlc";             Default=$true  },
     @{ Cat="Editores";     Nombre="Notepad++";                    Choco="notepadplusplus"; Default=$true  },
